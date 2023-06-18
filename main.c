@@ -14,15 +14,7 @@ void logexit(const char* msg){
 }
 
 char *algorithm, *logFileName;
-int numPages,pageSize,memorySize,operations,reads,writes,hits,misses,faults,s,validPages;
-operations = 0;
-reads = 0;
-writes = 0;
-hits = 0;
-misses = 0;
-faults = 0;
-s = 0;
-validPages = 0;
+int numPages,pageSize,memorySize,operations,reads,writes,hits,faults,s,validPages;
 
 typedef struct {
     int page;
@@ -38,9 +30,10 @@ typedef struct {
 } Node;
 
 typedef struct {
-    Node* front;
-    Node* rear;
+    Node* first;
+    Node* last;
 } List;
+List replace_list;
 
 int findPage(page){
     for(int i = 0; i < numPages; i++){
@@ -51,43 +44,86 @@ int findPage(page){
     return 0;
 }
 
+void updateReplaceList(int page){
+    if(strcmp(algorithm,"fifo") == 0){
+        //atualiza fila(adiciona nó no final)
+        Node* node = (Node*) malloc(sizeof(Node));
+        node->next = NULL;
+       node->prev = replace_list.last;
+        node->page = page;
+        if(replace_list.last != NULL){
+            replace_list.last->next = node;
+        }
+        replace_list.last = node;
+        if(replace_list.first == NULL){
+            replace_list.first = node;
+        }
+    }
+    else if(strcmp(algorithm,"lru") == 0){
+        //atualizar fila(adiciona nó no início)
+        Node* node = (Node*) malloc(sizeof(Node));
+        node->next = replace_list.first;
+        node->prev = NULL;
+        node->page = page;
+        if(replace_list.first != NULL){
+            replace_list.first->prev = node;
+        }
+        replace_list.first = node;
+        if(replace_list.last == NULL){
+            replace_list.last = node;
+        }
+    }
+}
+
 void accessPage(int page,char rw){
     int inMemory = findPage(page);
     if(!inMemory){
-        misses++;
+        faults++;
         if(validPages < numPages){
-            //add na posição validPages
+            //adiciona página na tabela na posição validPages
             pageTable[validPages].page = page;
             pageTable[validPages].valid = 1;
             pageTable[validPages].dirty = 0;
             validPages++;
-            if(strcmp(algorithm,"fifo") == 0){
-                //atualizar fila
-            }
+            updateReplaceList(page);
         }
         else{
             faults++;
             //replace usando o algoritmo
             if(strcmp(algorithm,"fifo") == 0){
-                fifo(page);
+                replace_fifo(page);
             }
             else if(strcmp(algorithm,"2a") == 0){
-                _2a(page);
+                replace_2a(page);
             }
             else if(strcmp(algorithm,"lru") == 0){
-                LRU(page);
+                replace_lru(page);
             }
             else if(strcmp(algorithm,"random") == 0){
-                _random(page);
+                replace_random(page);
             }
         }
     }else{
         hits++;
+        if(strcmp(algorithm,"lru") == 0){
+                //atualizar fila
+                
+            }
     }
     
 }
 
 int main(int argc, char** argv){
+    operations = 0;
+    reads = 0;
+    writes = 0;
+    hits = 0;
+    faults = 0;
+    s = 0;
+    validPages = 0;
+    replace_list.first = NULL;
+    replace_list.last = NULL;
+
     if (argc != 5) {
         logexit("Usage: tp2virtual <algorithm> <arquivo.log> <pageSize> <memorySize>\n");
     }
@@ -155,7 +191,6 @@ int main(int argc, char** argv){
 	printf("Número total de acessos à memória contidos no arquivo %i\n", operations);
 	printf("Número de operações de leitura: %i\n", reads);
 	printf("Número de operações de escrita: %i\n", writes);
-	printf("Page hits: %i\n", hits);
-	printf("Page misses: %i\n", misses);
+	printf("Número de page hits: %i\n", hits);
 	printf("Numero de page faults: %f%% \n", faults);
 }
