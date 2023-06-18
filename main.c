@@ -62,7 +62,32 @@ void updateReplaceList(int page,int id){
         }
     }
     else if(strcmp(algorithm,"lru") == 0){
-        //atualizar fila(adiciona nó no início)
+        //atualizar fila
+        //primeiro verifica se o nó está na fila e remove
+        //depois adiciona nó no início)
+        Node* iter = replace_list.first;
+        Node* toDelete = NULL;
+        while(iter != NULL){
+            if(iter->page == page){
+                if(iter->prev == NULL){ //se iter é o primeiro nó
+                    break;
+                }
+                else if(iter->next == NULL){ //se iter é o último nó
+                    iter->prev->next = NULL;
+                    replace_list.last = iter->prev;
+                    toDelete = iter;
+                }
+                else{ //se iter é um nó do meio
+                    iter->prev->next = iter->next;
+                    iter->next->prev = iter->prev;
+                    toDelete = iter;
+                }
+                if (toDelete) {
+                    free(toDelete);
+                    toDelete = NULL;
+                }
+            }
+        }
         Node* node = (Node*) malloc(sizeof(Node));
         node->next = replace_list.first;
         node->prev = NULL;
@@ -78,6 +103,15 @@ void updateReplaceList(int page,int id){
     }
 }
 
+void removeFromList(){
+    if(strcmp(algorithm,"fifo") == 0){
+        //remove first
+    }
+    else if(strcmp(algorithm,"lru") == 0){
+        //remove first
+    }
+}
+
 void accessPage(int page,char rw){
     int dirty;
     if(rw == 'W' || rw == 'w'){
@@ -87,7 +121,7 @@ void accessPage(int page,char rw){
         dirty = 0;
     }
     int inMemory = findPage(page);
-    if(!inMemory){
+    if(inMemory == -1){
         faults++;
         if(validPages < numPages){
             //adiciona página na tabela na posição validPages
@@ -108,6 +142,7 @@ void accessPage(int page,char rw){
                 pageTable[replace_list.first->id].page = page;
                 pageTable[replace_list.first->id].dirty = dirty;
                 pageTable[replace_list.first->id].valid = 1;
+                removeFromList();
             }
             else if(strcmp(algorithm,"2a") == 0){
                 replace_2a(page);
@@ -122,7 +157,7 @@ void accessPage(int page,char rw){
     }else{
         hits++;
         if(strcmp(algorithm,"lru") == 0){
-            updateReplaceList(page);
+            updateReplaceList(page,inMemory);
         }
     }
     
