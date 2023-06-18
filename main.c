@@ -25,22 +25,66 @@ s = 0;
 validPages = 0;
 
 typedef struct {
-    int address;
+    int page;
     int valid;
     int dirty;
 } PageTableEntry;
+PageTableEntry* pageTable;
 
-void writeAddr(int addr,PageTableEntry *pageTable){
-    if(validPages < numPages){
-        //add na posição validPages
-        pageTable[validPages].address = addr;
-        pageTable[validPages].valid = 1;
-        pageTable[validPages].dirty = 0;
+typedef struct {
+    int page;
+    Node* next;
+    Node* prev;
+} Node;
+
+typedef struct {
+    Node* front;
+    Node* rear;
+} List;
+
+int findPage(page){
+    for(int i = 0; i < numPages; i++){
+        if(pageTable[i].page == page){
+            return 1;
+        }
     }
-    else{
-        faults++;
-        //replace usando o algoritmo
+    return 0;
+}
+
+void accessPage(int page,char rw){
+    int inMemory = findPage(page);
+    if(!inMemory){
+        misses++;
+        if(validPages < numPages){
+            //add na posição validPages
+            pageTable[validPages].page = page;
+            pageTable[validPages].valid = 1;
+            pageTable[validPages].dirty = 0;
+            validPages++;
+            if(strcmp(algorithm,"fifo") == 0){
+                //atualizar fila
+            }
+        }
+        else{
+            faults++;
+            //replace usando o algoritmo
+            if(strcmp(algorithm,"fifo") == 0){
+                fifo(page);
+            }
+            else if(strcmp(algorithm,"2a") == 0){
+                _2a(page);
+            }
+            else if(strcmp(algorithm,"lru") == 0){
+                LRU(page);
+            }
+            else if(strcmp(algorithm,"random") == 0){
+                _random(page);
+            }
+        }
+    }else{
+        hits++;
     }
+    
 }
 
 int main(int argc, char** argv){
@@ -76,25 +120,29 @@ int main(int argc, char** argv){
         s++;
     }
 
-    PageTableEntry* pageTable = malloc(sizeof(PageTableEntry) * numPages);
+    pageTable = malloc(sizeof(PageTableEntry) * numPages);
     for(int i = 0; i < numPages; i++){
         pageTable[i].valid = 0;
         pageTable[i].dirty = 0;
     }
 
-    unsigned int addr;
+    unsigned int addr, page;
     char rw;
-    while (fscanf(file, "%x %c", &addr, &rw) != EOF) {
+    while(fscanf(file, "%x %c", &addr, &rw) != EOF) {
         operations++;
-        if(rw == 'W' || rw == 'w'){
-            writeAddr(addr, pageTable);
+        page = addr >> s;
+        accessPage(page,rw);
+
+
+        /*if(rw == 'W' || rw == 'w'){
+            writePage(page);
         }
         else if(rw == 'R' || rw == 'r'){
             //read
         }
         else{
             logexit("Error. invalid entry format.");
-        }
+        }*/
     }
     fclose(file);
 
@@ -104,7 +152,7 @@ int main(int argc, char** argv){
 	printf("Tamanho das páginas: %i KB\n", pageSize);
 	printf("Técnica de reposição: %s\n", algorithm);
     printf("Número de páginas: %i\n", numPages);
-	printf("Número de operações no arquivo de entrada: %i\n", operations);
+	printf("Número total de acessos à memória contidos no arquivo %i\n", operations);
 	printf("Número de operações de leitura: %i\n", reads);
 	printf("Número de operações de escrita: %i\n", writes);
 	printf("Page hits: %i\n", hits);
