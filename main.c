@@ -23,12 +23,12 @@ typedef struct {
 } PageTableEntry;
 PageTableEntry* pageTable;
 
-typedef struct {
+typedef struct Node{
     int id; //id representa a posição na tabela pageTable
     int page;
     int secondChance;
-    Node* next;
-    Node* prev;
+    struct Node* next;
+    struct Node* prev;
 } Node;
 
 typedef struct {
@@ -37,9 +37,10 @@ typedef struct {
 } List;
 List replace_list;
 
-int findPage(page){
+int findPage(int page){
     for(int i = 0; i < numPages; i++){
-        if(pageTable[i].page == page){
+        if((pageTable[i].page == page) && (pageTable[i].valid == 1)){
+            //printf("Página(i):%d, page:%d\n",i,page); //DEBUG
             return i;
         }
     }
@@ -47,7 +48,7 @@ int findPage(page){
 }
 
 void updateReplaceList(int page,int id){
-    if(strcmp(algorithm,"fifo") == 0 || strcmp(algorithm,"2a")){
+    if(strcmp(algorithm,"fifo") == 0 || strcmp(algorithm,"2a") == 0){
         //atualiza fila(adiciona nó no final)
         Node* node = (Node*) malloc(sizeof(Node));
         node->next = NULL;
@@ -55,20 +56,18 @@ void updateReplaceList(int page,int id){
         node->page = page;
         node->id = id;
         node->secondChance = 0;
-        if(replace_list.last != NULL){
+        if(replace_list.first == NULL){
+            replace_list.first = node;
+        }else{
             replace_list.last->next = node;
         }
         replace_list.last = node;
-        if(replace_list.first == NULL){
-            replace_list.first = node;
-        }
     }
     else if(strcmp(algorithm,"lru") == 0){
         //atualizar fila
         //primeiro verifica se o nó está na fila e remove
-        //depois adiciona nó no início)
+        //depois adiciona nó no início
         Node* iter = replace_list.first;
-        Node* toDelete = NULL;
         while(iter != NULL){
             if(iter->page == page){
                 if(iter->prev == NULL){ //se iter é o primeiro nó
@@ -77,18 +76,16 @@ void updateReplaceList(int page,int id){
                 else if(iter->next == NULL){ //se iter é o último nó
                     iter->prev->next = NULL;
                     replace_list.last = iter->prev;
-                    toDelete = iter;
+                    free(iter);
                 }
                 else{ //se iter é um nó do meio
                     iter->prev->next = iter->next;
                     iter->next->prev = iter->prev;
-                    toDelete = iter;
+                    free(iter);
                 }
-                if(toDelete){
-                    free(toDelete);
-                    toDelete = NULL;
-                }
+                break;
             }
+            iter = iter->next;
         }
         Node* node = (Node*) malloc(sizeof(Node));
         node->next = replace_list.first;
@@ -104,28 +101,35 @@ void updateReplaceList(int page,int id){
             replace_list.last = node;
         }
     }
-
+    /*printf("T:");
+    for(int i = 0; i < numPages; i++){
+        printf("%d ",pageTable[i].page);
+    }
+    printf("   \n");*/
 }
 
-void removeFromList(){
-    if((strcmp(algorithm,"fifo") == 0) || (strcmp(algorithm,"lru") == 0)){
+void removeFirstFromList(){
         //remove o primeiro nó da lista
         Node* toDelete = replace_list.first;
         if(replace_list.first != NULL){
-            if (replace_list.first == replace_list.last){
+            if(replace_list.first == replace_list.last){
                 replace_list.first = NULL;
                 replace_list.last = NULL;
-            } else {
+                logexit("Removendo o único elemento da lista\n");
+            }
+            else{
                 replace_list.first = replace_list.first->next;
                 replace_list.first->prev = NULL;
             }
+            free(toDelete);
         }
-        free(toDelete);
-    }
+        else{
+            logexit("Tentando remover lista vazia(first == NULL)\n");
+        }
 }
 
 void accessPage(int page,char rw){
-    int dirty;
+    int dirty = 0;
     if(rw == 'W' || rw == 'w'){
         dirty = 1;
     }
@@ -144,7 +148,6 @@ void accessPage(int page,char rw){
             validPages++;
         }
         else{
-            faults++;
             //adiciona página na tabela/replace usando o algoritmo escolhido
             if(strcmp(algorithm,"fifo") == 0){
                 if(pageTable[replace_list.first->id].dirty == 1){
@@ -153,8 +156,8 @@ void accessPage(int page,char rw){
                 pageTable[replace_list.first->id].page = page;
                 pageTable[replace_list.first->id].dirty = dirty;
                 pageTable[replace_list.first->id].valid = 1;
-                updateReplaceList(page,replace_list.first->id);
-                removeFromList();
+                updateReplaceList(replace_list.first->page,replace_list.first->id);
+                removeFirstFromList();
             }
             else if(strcmp(algorithm,"2a") == 0){
                 Node* iter = replace_list.first;
@@ -167,7 +170,7 @@ void accessPage(int page,char rw){
                         pageTable[iter->id].dirty = dirty;
                         pageTable[iter->id].valid = 1;
                         updateReplaceList(page,replace_list.first->id);
-                        removeFromList();
+                        removeFirstFromList();
                         break;
                     }
                     else{
@@ -180,7 +183,11 @@ void accessPage(int page,char rw){
                         replace_list.last = iter;
                     }
                     // Vamos para o próximo nó. Se chegamos ao final da lista, reiniciamos para o primeiro
-                    iter = iter->next ? iter->next : replace_list.first;
+                    if(iter->next != NULL){
+                        iter = iter->next;
+                    }else{
+                        iter = replace_list.first;
+                    }
                 }
             }
             else if(strcmp(algorithm,"lru") == 0){
@@ -191,7 +198,7 @@ void accessPage(int page,char rw){
                 pageTable[replace_list.first->id].dirty = dirty;
                 pageTable[replace_list.first->id].valid = 1;
                 updateReplaceList(page,replace_list.first->id);
-                removeFromList();
+                removeFirstFromList();
             }
             else if(strcmp(algorithm,"random") == 0){
                 int replace = (random() % numPages);
@@ -213,11 +220,12 @@ void accessPage(int page,char rw){
             while(iter != NULL){
                 if(iter->page == page){
                     iter->secondChance = 1;
+                    break;
                 }
+                iter = iter->next;
             }
         }
     }
-    
 }
 
 int main(int argc, char** argv){
@@ -232,12 +240,12 @@ int main(int argc, char** argv){
     replace_list.first = NULL;
     replace_list.last = NULL;
 
-    if (argc != 5) {
+    if(argc != 5) {
         logexit("Usage: tp2virtual <algorithm> <arquivo.log> <pageSize> <memorySize>\n");
     }
     
     algorithm = argv[1];
-    if (strcmp(algorithm, "lru") != 0 && strcmp(algorithm, "2a") != 0 &&
+    if(strcmp(algorithm, "lru") != 0 && strcmp(algorithm, "2a") != 0 &&
         strcmp(algorithm, "fifo") != 0 && strcmp(algorithm, "random") != 0){
         logexit("Invalid algorithm. Please use 'lru', '2a', 'fifo' or 'random'.\n");
     }
@@ -247,25 +255,26 @@ int main(int argc, char** argv){
         logexit("Invalid page size. Please use a value between 2 and 64.\n");
     }
     memorySize = atoi(argv[4]);
-    if (memorySize < MIN_MEMORY_SIZE || memorySize > MAX_MEMORY_SIZE) {
+    if(memorySize < MIN_MEMORY_SIZE || memorySize > MAX_MEMORY_SIZE) {
         logexit("Invalid memory size. Please use a value between 128 and 16384.\n");
     }
     numPages = memorySize / pageSize;
 
     FILE* file = fopen(logFileName, "r");
-    if (file == NULL) {
+    if(file == NULL) {
         logexit("Error opening file.\n");
     }
 
     /* Derivar o valor de s: */
     int tmp = pageSize;
-    while (tmp>1) {
+    while(tmp>1) {
         tmp = tmp>>1;
         s++;
     }
 
     pageTable = malloc(sizeof(PageTableEntry) * numPages);
     for(int i = 0; i < numPages; i++){
+        pageTable[i].page = -1;
         pageTable[i].valid = 0;
         pageTable[i].dirty = 0;
     }
@@ -275,31 +284,27 @@ int main(int argc, char** argv){
     while(fscanf(file, "%x %c", &addr, &rw) != EOF) {
         operations++;
         page = addr >> s;
+        //printf("-Page:%d|Addr:%x|s:%d\n",page,addr,s); //DEBUG
+        if(rw == 'R' || rw == 'r'){
+            reads++;
+        }
+        else if(rw == 'W' || rw == 'w'){
+            writes++;
+        }
         accessPage(page,rw);
-
-
-        /*if(rw == 'W' || rw == 'w'){
-            writePage(page);
-        }
-        else if(rw == 'R' || rw == 'r'){
-            //read
-        }
-        else{
-            logexit("Error. invalid entry format.");
-        }*/
     }
     fclose(file);
 
     printf("\nExecutando o simulador...\n");
     printf("Arquivo de entrada: %s\n", logFileName);
-	printf("Tamanho da memória: %i KB\n", memorySize);
-	printf("Tamanho das páginas: %i KB\n", pageSize);
+	printf("Tamanho da memória: %d KB\n", memorySize);
+	printf("Tamanho das páginas: %d KB\n", pageSize);
 	printf("Técnica de reposição: %s\n", algorithm);
-    printf("Número de páginas: %i\n", numPages);
-	printf("Número total de acessos à memória contidos no arquivo %i\n", operations);
-	printf("Número de operações de leitura: %i\n", reads);
-	printf("Número de operações de escrita: %i\n", writes);
-    printf("Número de páginas sujas escritas de volta no disco: %i\n", dirtyWritten);
-	printf("Número de page hits: %i\n", hits);
-	printf("Numero de page faults: %f%% \n", faults);
+    //printf("Número de páginas: %d\n", numPages);
+	printf("Número total de acessos à memória contidos no arquivo: %d\n", operations);
+    //printf("Número de operações de leitura: %d\n", reads);
+	//printf("Número de operações de escrita: %d\n", writes);
+    printf("Número de páginas sujas escritas de volta no disco: %d\n", dirtyWritten);
+	printf("Numero de page faults: %d \n", faults);
+    //printf("Número de page hits: %d\n", hits);
 }
