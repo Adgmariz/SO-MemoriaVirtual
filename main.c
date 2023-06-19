@@ -26,6 +26,7 @@ PageTableEntry* pageTable;
 typedef struct {
     int id; //id representa a posição na tabela pageTable
     int page;
+    int secondChance;
     Node* next;
     Node* prev;
 } Node;
@@ -46,13 +47,14 @@ int findPage(page){
 }
 
 void updateReplaceList(int page,int id){
-    if(strcmp(algorithm,"fifo") == 0){
+    if(strcmp(algorithm,"fifo") == 0 || strcmp(algorithm,"2a")){
         //atualiza fila(adiciona nó no final)
         Node* node = (Node*) malloc(sizeof(Node));
         node->next = NULL;
         node->prev = replace_list.last;
         node->page = page;
         node->id = id;
+        node->secondChance = 0;
         if(replace_list.last != NULL){
             replace_list.last->next = node;
         }
@@ -82,7 +84,7 @@ void updateReplaceList(int page,int id){
                     iter->next->prev = iter->prev;
                     toDelete = iter;
                 }
-                if (toDelete) {
+                if(toDelete){
                     free(toDelete);
                     toDelete = NULL;
                 }
@@ -93,6 +95,7 @@ void updateReplaceList(int page,int id){
         node->prev = NULL;
         node->page = page;
         node->id = id;
+        node->secondChance = 0;
         if(replace_list.first != NULL){
             replace_list.first->prev = node;
         }
@@ -101,14 +104,23 @@ void updateReplaceList(int page,int id){
             replace_list.last = node;
         }
     }
+
 }
 
 void removeFromList(){
-    if(strcmp(algorithm,"fifo") == 0){
-        //remove first
-    }
-    else if(strcmp(algorithm,"lru") == 0){
-        //remove first
+    if((strcmp(algorithm,"fifo") == 0) || (strcmp(algorithm,"lru") == 0)){
+        //remove o primeiro nó da lista
+        Node* toDelete = replace_list.first;
+        if(replace_list.first != NULL){
+            if (replace_list.first == replace_list.last){
+                replace_list.first = NULL;
+                replace_list.last = NULL;
+            } else {
+                replace_list.first = replace_list.first->next;
+                replace_list.first->prev = NULL;
+            }
+        }
+        free(toDelete);
     }
 }
 
@@ -135,29 +147,74 @@ void accessPage(int page,char rw){
             faults++;
             //adiciona página na tabela/replace usando o algoritmo escolhido
             if(strcmp(algorithm,"fifo") == 0){
-                //replace_fifo(page);
                 if(pageTable[replace_list.first->id].dirty == 1){
                     dirtyWritten++;
                 }
                 pageTable[replace_list.first->id].page = page;
                 pageTable[replace_list.first->id].dirty = dirty;
                 pageTable[replace_list.first->id].valid = 1;
+                updateReplaceList(page,replace_list.first->id);
                 removeFromList();
             }
             else if(strcmp(algorithm,"2a") == 0){
-                replace_2a(page);
+                Node* iter = replace_list.first;
+                while(1){
+                    if(iter->secondChance == 0){
+                        if(pageTable[iter->id].dirty == 1){
+                            dirtyWritten++;
+                        }
+                        pageTable[iter->id].page = page;
+                        pageTable[iter->id].dirty = dirty;
+                        pageTable[iter->id].valid = 1;
+                        updateReplaceList(page,replace_list.first->id);
+                        removeFromList();
+                        break;
+                    }
+                    else{
+                        iter->secondChance = 0;
+                        replace_list.first = iter->next;
+                        replace_list.first->prev = NULL;
+                        iter->prev = replace_list.last;
+                        iter->next = NULL;
+                        replace_list.last->next = iter;
+                        replace_list.last = iter;
+                    }
+                    // Vamos para o próximo nó. Se chegamos ao final da lista, reiniciamos para o primeiro
+                    iter = iter->next ? iter->next : replace_list.first;
+                }
             }
             else if(strcmp(algorithm,"lru") == 0){
-                replace_lru(page);
+                if(pageTable[replace_list.first->id].dirty == 1){
+                    dirtyWritten++;
+                }
+                pageTable[replace_list.first->id].page = page;
+                pageTable[replace_list.first->id].dirty = dirty;
+                pageTable[replace_list.first->id].valid = 1;
+                updateReplaceList(page,replace_list.first->id);
+                removeFromList();
             }
             else if(strcmp(algorithm,"random") == 0){
-                replace_random(page);
+                int replace = (random() % numPages);
+                if(pageTable[replace].dirty == 1){
+                    dirtyWritten++;
+                }
+                pageTable[replace].page = page;
+                pageTable[replace].dirty = dirty;
+                pageTable[replace].valid = 1;
             }
         }
     }else{
         hits++;
         if(strcmp(algorithm,"lru") == 0){
             updateReplaceList(page,inMemory);
+        }
+        else if(strcmp(algorithm,"2a") == 0){
+            Node* iter = replace_list.first;
+            while(iter != NULL){
+                if(iter->page == page){
+                    iter->secondChance = 1;
+                }
+            }
         }
     }
     
