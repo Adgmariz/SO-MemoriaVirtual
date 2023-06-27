@@ -307,4 +307,5 @@ int main(int argc, char** argv){
     printf("Número de páginas sujas escritas de volta no disco: %d\n", dirtyWritten);
 	printf("Numero de page faults: %d \n", faults);
     //printf("Número de page hits: %d\n", hits);
+    //printf("p:%d|m:%d |faults:%d|escritas:%d\n",pageSize,memorySize,faults,dirtyWritten);
 }
